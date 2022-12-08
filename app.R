@@ -1,4 +1,4 @@
-setwd("E:/Metaverse_Trend_Tracker_IsaacWang")
+#setwd("E:/Metaverse_Trend_Tracker_IsaacWang")
 #install.packages('ggeffects')
 library(shiny)
 library(dplyr)
@@ -12,7 +12,7 @@ cates <- unique(tl$Category)
 
 
 ui <- fluidPage(
-  titlePanel("Metaverse Trend Analyzer"),
+  titlePanel("Metaverse Technology Trend Analyzer"),
   sidebarLayout(
     sidebarPanel(
       fluidRow(
@@ -95,12 +95,7 @@ server <- function(input, output, session) {
         return({plot(arrangeGrob(bps[[5]],bps[[6]],bps[[7]],bps[[8]],nrow=4))})
       }
   })
-  output$plot3 <- renderPlot({
-    if (is.null(v$data)){
-      return()} else {
-        return({plot(arrangeGrob(bps[[9]],bps[[10]],bps[[11]],nrow=3))})
-      }
-  })
+ 
 }
 
 shinyApp(ui, server)
