@@ -1,16 +1,17 @@
-#install.packages('rsconnect')
 
+#install.packages("wordcloud")
+setwd("E:/Metaverse_Trend_Tracker_IsaacWang")
 library(dplyr)
 library(tidytext)
 library(ggplot2)
 library(textstem)
 library(readr)
 library(stringr)
-
-library(shiny)
-library(DT)
 library(rvest)
-library(jsonlite)
+library(tidyverse)
+library(RCurl)
+library(tidyr)
+library(wordcloud)
 
 library(rsconnect)
 
@@ -50,51 +51,77 @@ CountTech <- function(){
   }
   
   #search job
-  searchJob <- function(job, n){
-    # Create a Progress object
-    #progress <- shiny::Progress$new()
-    # Make sure it closes when we exit this reactive, even if there's an error
-    #on.exit(progress$close())
+  searchJob <- function(job){
+    #define base terms
+    base_url <- 'https://www.cybercoders.com/'
+    page <- 0
     
-    #progress$set(message = "Crawling:", value = 0)
-    count <- ceiling(n/15)
-    job_companies <- c()
-    job_titles <- c()
-    job_urls <- c()
-    job_descs <- c()
-    for(i in 0:(count-1)){
-      #progress$inc((i)/count, detail = paste0("https://www.indeed.com/jobs?q=", URLencode(job), "&start=", i*15))
-      print(paste0("https://www.indeed.com/jobs?q=", job, "&start=", i*15))
-      page = read_html(paste0("https://www.indeed.com/jobs?q=", URLencode(job), "&start=", i*15))
-      jobcards <- html_node(page, "#mosaic-provider-jobcards")
-      job_links <- html_nodes(jobcards, 'a[id^="job"]')
-      if (length(job_links)){
-        titles <- rep(NA, length(job_links))
-        names <-  rep(NA, length(job_links))
-        urls <-  rep(NA, length(job_links))
-        descs  <- rep(NA, length(job_links))
-        for(k in 1:length(job_links)){
-          link <- job_links[k]
-          h2 <- html_node(link, "h2.jobTitle")
-          spans <- html_nodes(h2, "span")
-          titles[k] <- html_text(spans[length(spans)])
-          names[k] <- link %>% html_node("span.companyName") %>% html_text()
-          urls[k] <- paste0("https://www.indeed.com", html_attr(link, "href"))
-        }
-        for(j in 1:length(urls)){
-          page2 <- read_html(urls[j])
-          desc <- page2 %>% html_node("div#jobDescriptionText") %>% html_text()
-          descs[j] <- desc
-        }
-        job_companies <- c(job_companies,  names)
-        job_titles <- c(job_titles, titles)
-        job_urls <- c(job_urls, urls)
-        job_descs <- c(job_descs, descs)
-      } else {
-        job_descs <- ''
+    #define variables as data container
+    job_title <- character()
+    job_skill <- character()
+    job_location <- character()
+    job_salary <- character()
+    job_company <- character()
+    
+    
+    #loop the pages and break whenever no more reocords can be found
+    while(TRUE) {
+      page = page+1
+      #url <- getURL('https://www.cybercoders.com/search/?page=1&searchterms=data+scientist&searchlocation=&newsearch=true&originalsearch=true&sorttype=')
+      url <- getURL(str_c(base_url,'search/?page=',page,'&searchterms=',URLencode(job),'&searchlocation=&newsearch=true&originalsearch=true&sorttype='))
+      html_raw <- read_html(url)
+      
+      #locate the element with attribute class = job-title
+      job_title_page <- html_raw %>%
+        html_nodes("[class='job-title']") %>%
+        html_text() %>%
+        str_remove_all('\\r\\n') %>%
+        str_trim()
+      
+      #locate the element with attribute class = skill-list, concatenate all skills into one text strings
+      job_skill_page <- html_raw %>%
+        html_nodes("[class='skill-list']") %>% 
+        lapply(function(x) html_nodes(x, "[class='skill-name']")) %>%
+        lapply(function(x) html_text(x)) %>%
+        lapply(function(x) str_c(x,collapse = ', ')) %>%
+        unlist()
+      
+      #locate the element with attribute class = location
+      job_location_page <- html_raw %>%
+        html_nodes("[class='location']") %>%
+        html_text() 
+      
+      #locate the element with attribute class = wage
+      job_salary_page <- html_raw %>%
+        html_nodes("[class='wage']") %>%
+        html_text() %>%
+        str_replace('[[:alpha:][:punct:]]+ (.+)$','\\1') %>%
+        str_remove_all(' ')
+      
+      
+      # break the loop when no more record can be found
+      if (length(job_title_page)==0) {
+        page = page -1
+        break
       }
+      
+      #store data
+      job_title <- c(job_title, job_title_page)
+      job_skill <- c(job_skill, job_skill_page)
+      job_location <-c(job_location, job_location_page)
+      job_salary <-c(job_salary, job_salary_page)
+      #No info at this website, but keep this variable as scrapping other websites do
+      job_company <- c(job_company, rep(NA,length(job_title_page)))
+      
+      #print progress
+      print(str_c(' Scrapping for Page: ',page, ' is done!'))
+      
     }
-    job_descs # the returned value of searchJob
+    #consolidate all varialbles into a dataframe
+    df_cyber_coders <- as.data.frame(cbind(job_title,job_skill, job_company, job_location, job_salary), stringsAsFactors = FALSE)
+    
+    str(df_cyber_coders)
+    df_cyber_coders
   }# definition of searchJob ends
   
   
@@ -102,7 +129,7 @@ CountTech <- function(){
   tech=unique(technologylist$Technology)
   count_tech_total=numeric(length(tech))
   for (job in jobtitles$Job_Title){  # Run it one by one by change the code to: for (job in jobtitles$Job_Title[1])
-    desp_text <- searchJob(job,50) %>% paste(collapse = '')
+    desp_text <- searchJob(job) %>% paste(collapse = '')
     count_tech=numeric(length(tech))
     for (i in 1:length(tech)){
       count_tech[i] = countKeyword(desp_text,tech[i]) # count keyword in that job's descriptions
